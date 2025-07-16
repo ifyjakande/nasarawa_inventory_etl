@@ -15,15 +15,6 @@ SHEET_NAMES = {
     'SUMMARY': 'summary'
 }
 
-PRODUCT_TYPES = {
-    'WHOLE CHICKEN': 'whole chicken',
-    'GIZZARD': 'gizzard',
-    'WINGS': 'wings',
-    'LAPS': 'laps',
-    'BREAST': 'breast',
-    'BONE': 'bone',
-    'FILLET': 'fillet'
-}
 
 DATE_FORMATS = ['%d %b %Y', '%d/%m/%y', '%d-%b-%Y']
 GOOGLE_SHEETS_SCOPE = ['https://www.googleapis.com/auth/spreadsheets']
@@ -143,56 +134,78 @@ def create_summary_df(stock_inflow_df: pd.DataFrame, release_df: pd.DataFrame) -
         summary_df['month'] = summary_df['year_month'].str.split('-').str[1].str.lower()
         summary_df = summary_df[['month', 'year_month']]
         
+        # Get unique product types dynamically from the data
+        unique_product_types = stock_inflow_df['product_type'].dropna().unique()
+        print(f"\\nFound product types: {unique_product_types}")
+        
         # Calculate weight loss for each product
         weight_loss_summaries = {}
-        for product_key, product_value in PRODUCT_TYPES.items():
+        for product_type in unique_product_types:
             product_data = stock_inflow_df[
-                stock_inflow_df['product_type'] == product_value
+                stock_inflow_df['product_type'] == product_type
             ].copy()
             
             if not product_data.empty and 'kaduna_coldroom_weight' in product_data.columns and 'weight' in product_data.columns:
                 product_data['weight_loss'] = product_data['kaduna_coldroom_weight'] - product_data['weight']
-                weight_loss_summaries[f'{product_value}_weight_loss'] = product_data.groupby('year_month')['weight_loss'].sum()
+                weight_loss_summaries[f'{product_type}_weight_loss'] = product_data.groupby('year_month')['weight_loss'].sum()
         
-        product_summaries = {
-            'chicken_inflow': stock_inflow_df[
-                stock_inflow_df['product_type'] == PRODUCT_TYPES['WHOLE CHICKEN']
-            ].groupby('year_month').agg({
-                'quantity': 'sum',
-                'weight': 'sum'
-            }),
-            'chicken_release': release_df[
-                release_df['product'] == PRODUCT_TYPES['WHOLE CHICKEN']
-            ].groupby('year_month').agg({
-                'quantity': 'sum',
-                'weight': 'sum'
-            }),
-            'gizzard_inflow': stock_inflow_df[
-                stock_inflow_df['product_type'] == PRODUCT_TYPES['GIZZARD']
-            ].groupby('year_month').agg({
-                'weight': 'sum'
-            }),
-            'gizzard_release': release_df[
-                release_df['product'] == PRODUCT_TYPES['GIZZARD']
-            ].groupby('year_month').agg({
-                'weight': 'sum'
-            })
-        }
+        # Create dynamic product summaries for both inflow and release
+        product_summaries = {}
         
-        summary_columns = {
-            'total_chicken_inflow_quantity': ('chicken_inflow', 'quantity'),
-            'total_chicken_inflow_weight': ('chicken_inflow', 'weight'),
-            'total_chicken_release_quantity': ('chicken_release', 'quantity'),
-            'total_chicken_release_weight': ('chicken_release', 'weight'),
-            'total_gizzard_inflow_weight': ('gizzard_inflow', 'weight'),
-            'total_gizzard_release_weight': ('gizzard_release', 'weight')
-        }
+        # Get unique product types from both inflow and release data
+        inflow_products = stock_inflow_df['product_type'].dropna().unique()
+        release_products = release_df['product'].dropna().unique() if 'product' in release_df.columns else []
+        
+        # Process inflow data for each product type
+        for product_type in inflow_products:
+            product_data = stock_inflow_df[stock_inflow_df['product_type'] == product_type]
+            if not product_data.empty:
+                agg_dict = {'weight': 'sum'}
+                # Add quantity aggregation for products that have quantity data
+                if 'quantity' in product_data.columns and product_data['quantity'].notna().any():
+                    agg_dict['quantity'] = 'sum'
+                
+                product_summaries[f'{product_type}_inflow'] = product_data.groupby('year_month').agg(agg_dict)
+        
+        # Process release data for each product type
+        for product_type in release_products:
+            product_data = release_df[release_df['product'] == product_type]
+            if not product_data.empty:
+                agg_dict = {'weight': 'sum'}
+                # Add quantity aggregation for products that have quantity data
+                if 'quantity' in product_data.columns and product_data['quantity'].notna().any():
+                    agg_dict['quantity'] = 'sum'
+                
+                product_summaries[f'{product_type}_release'] = product_data.groupby('year_month').agg(agg_dict)
+        
+        # Create dynamic summary columns for inflow and release
+        summary_columns = {}
+        
+        # Add inflow columns for each product type
+        for product_type in inflow_products:
+            product_key = f'{product_type}_inflow'
+            if product_key in product_summaries:
+                summary_key = product_type.replace(' ', '_').lower()
+                if 'quantity' in product_summaries[product_key].columns:
+                    summary_columns[f'total_{summary_key}_inflow_quantity'] = (product_key, 'quantity')
+                if 'weight' in product_summaries[product_key].columns:
+                    summary_columns[f'total_{summary_key}_inflow_weight'] = (product_key, 'weight')
+        
+        # Add release columns for each product type
+        for product_type in release_products:
+            product_key = f'{product_type}_release'
+            if product_key in product_summaries:
+                summary_key = product_type.replace(' ', '_').lower()
+                if 'quantity' in product_summaries[product_key].columns:
+                    summary_columns[f'total_{summary_key}_release_quantity'] = (product_key, 'quantity')
+                if 'weight' in product_summaries[product_key].columns:
+                    summary_columns[f'total_{summary_key}_release_weight'] = (product_key, 'weight')
         
         # Add weight loss columns
-        for product_key, product_value in PRODUCT_TYPES.items():
-            weight_loss_key = f'{product_value}_weight_loss'
+        for product_type in unique_product_types:
+            weight_loss_key = f'{product_type}_weight_loss'
             if weight_loss_key in weight_loss_summaries:
-                summary_columns[f'total_{product_value.replace(" ", "_")}_weight_loss'] = weight_loss_key
+                summary_columns[f'total_{product_type.replace(" ", "_").lower()}_weight_loss'] = weight_loss_key
         
         for col_name, summary_key in summary_columns.items():
             if isinstance(summary_key, tuple):
@@ -215,56 +228,73 @@ def create_summary_df(stock_inflow_df: pd.DataFrame, release_df: pd.DataFrame) -
         summary_df['sort_date'] = pd.to_datetime(summary_df['year_month'], format='%Y-%b')
         summary_df = summary_df.sort_values('sort_date')
 
-        # Initialize opening stock and stock balance columns
-        opening_stock_columns = [
-            'chicken_quantity_opening_stock',
-            'chicken_weight_opening_stock',
-            'gizzard_weight_opening_stock'
-        ]
+        # Create dynamic opening stock and stock balance columns
+        opening_stock_columns = []
+        stock_balance_columns = []
         
-        stock_balance_columns = [
-            'chicken_quantity_stock_balance',
-            'chicken_weight_stock_balance',
-            'gizzard_weight_stock_balance'
-        ]
+        # Create opening stock and balance columns for each product type
+        all_products = set(inflow_products) | set(release_products)
+        for product_type in all_products:
+            summary_key = product_type.replace(' ', '_').lower()
+            
+            # Add quantity columns if product has quantity data
+            inflow_key = f'{product_type}_inflow'
+            if inflow_key in product_summaries and 'quantity' in product_summaries[inflow_key].columns:
+                opening_stock_columns.append(f'{summary_key}_quantity_opening_stock')
+                stock_balance_columns.append(f'{summary_key}_quantity_stock_balance')
+            
+            # Add weight columns if product has weight data
+            if (inflow_key in product_summaries and 'weight' in product_summaries[inflow_key].columns) or \
+               (f'{product_type}_release' in product_summaries and 'weight' in product_summaries[f'{product_type}_release'].columns):
+                opening_stock_columns.append(f'{summary_key}_weight_opening_stock')
+                stock_balance_columns.append(f'{summary_key}_weight_stock_balance')
         
+        # Initialize all opening stock and balance columns
         for column in opening_stock_columns + stock_balance_columns:
             summary_df[column] = 0.0
 
         # Calculate running balances for each month
         for i in range(len(summary_df)):
-            if i == 0:
-                # For the first month, opening stock is 0
-                summary_df.iloc[i, summary_df.columns.get_loc('chicken_quantity_opening_stock')] = 0
-                summary_df.iloc[i, summary_df.columns.get_loc('chicken_weight_opening_stock')] = 0
-                summary_df.iloc[i, summary_df.columns.get_loc('gizzard_weight_opening_stock')] = 0
-            else:
-                # For subsequent months, opening stock is previous month's balance
-                summary_df.iloc[i, summary_df.columns.get_loc('chicken_quantity_opening_stock')] = \
-                    summary_df.iloc[i-1, summary_df.columns.get_loc('chicken_quantity_stock_balance')]
-                summary_df.iloc[i, summary_df.columns.get_loc('chicken_weight_opening_stock')] = \
-                    summary_df.iloc[i-1, summary_df.columns.get_loc('chicken_weight_stock_balance')]
-                summary_df.iloc[i, summary_df.columns.get_loc('gizzard_weight_opening_stock')] = \
-                    summary_df.iloc[i-1, summary_df.columns.get_loc('gizzard_weight_stock_balance')]
-
-            # Calculate stock balances for current month
-            summary_df.iloc[i, summary_df.columns.get_loc('chicken_quantity_stock_balance')] = (
-                summary_df.iloc[i, summary_df.columns.get_loc('chicken_quantity_opening_stock')] +
-                summary_df.iloc[i, summary_df.columns.get_loc('total_chicken_inflow_quantity')] -
-                summary_df.iloc[i, summary_df.columns.get_loc('total_chicken_release_quantity')]
-            )
-
-            summary_df.iloc[i, summary_df.columns.get_loc('chicken_weight_stock_balance')] = (
-                summary_df.iloc[i, summary_df.columns.get_loc('chicken_weight_opening_stock')] +
-                summary_df.iloc[i, summary_df.columns.get_loc('total_chicken_inflow_weight')] -
-                summary_df.iloc[i, summary_df.columns.get_loc('total_chicken_release_weight')]
-            )
-
-            summary_df.iloc[i, summary_df.columns.get_loc('gizzard_weight_stock_balance')] = (
-                summary_df.iloc[i, summary_df.columns.get_loc('gizzard_weight_opening_stock')] +
-                summary_df.iloc[i, summary_df.columns.get_loc('total_gizzard_inflow_weight')] -
-                summary_df.iloc[i, summary_df.columns.get_loc('total_gizzard_release_weight')]
-            )
+            for product_type in all_products:
+                summary_key = product_type.replace(' ', '_').lower()
+                
+                # Handle quantity columns
+                qty_opening_col = f'{summary_key}_quantity_opening_stock'
+                qty_balance_col = f'{summary_key}_quantity_stock_balance'
+                qty_inflow_col = f'total_{summary_key}_inflow_quantity'
+                qty_release_col = f'total_{summary_key}_release_quantity'
+                
+                if qty_opening_col in summary_df.columns and qty_balance_col in summary_df.columns:
+                    if i == 0:
+                        summary_df.iloc[i, summary_df.columns.get_loc(qty_opening_col)] = 0
+                    else:
+                        summary_df.iloc[i, summary_df.columns.get_loc(qty_opening_col)] = \
+                            summary_df.iloc[i-1, summary_df.columns.get_loc(qty_balance_col)]
+                    
+                    # Calculate balance
+                    opening_stock = summary_df.iloc[i, summary_df.columns.get_loc(qty_opening_col)]
+                    inflow = summary_df.iloc[i, summary_df.columns.get_loc(qty_inflow_col)] if qty_inflow_col in summary_df.columns else 0
+                    release = summary_df.iloc[i, summary_df.columns.get_loc(qty_release_col)] if qty_release_col in summary_df.columns else 0
+                    summary_df.iloc[i, summary_df.columns.get_loc(qty_balance_col)] = opening_stock + inflow - release
+                
+                # Handle weight columns
+                wt_opening_col = f'{summary_key}_weight_opening_stock'
+                wt_balance_col = f'{summary_key}_weight_stock_balance'
+                wt_inflow_col = f'total_{summary_key}_inflow_weight'
+                wt_release_col = f'total_{summary_key}_release_weight'
+                
+                if wt_opening_col in summary_df.columns and wt_balance_col in summary_df.columns:
+                    if i == 0:
+                        summary_df.iloc[i, summary_df.columns.get_loc(wt_opening_col)] = 0
+                    else:
+                        summary_df.iloc[i, summary_df.columns.get_loc(wt_opening_col)] = \
+                            summary_df.iloc[i-1, summary_df.columns.get_loc(wt_balance_col)]
+                    
+                    # Calculate balance
+                    opening_stock = summary_df.iloc[i, summary_df.columns.get_loc(wt_opening_col)]
+                    inflow = summary_df.iloc[i, summary_df.columns.get_loc(wt_inflow_col)] if wt_inflow_col in summary_df.columns else 0
+                    release = summary_df.iloc[i, summary_df.columns.get_loc(wt_release_col)] if wt_release_col in summary_df.columns else 0
+                    summary_df.iloc[i, summary_df.columns.get_loc(wt_balance_col)] = opening_stock + inflow - release
 
         # Sort in descending order (newest first) and clean up
         summary_df = summary_df.sort_values('sort_date', ascending=False)
@@ -272,9 +302,9 @@ def create_summary_df(stock_inflow_df: pd.DataFrame, release_df: pd.DataFrame) -
         summary_df = summary_df.drop('sort_date', axis=1)
         
         # Add percentage change columns for weight loss
-        for product_value in PRODUCT_TYPES.values():
-            weight_loss_col = f'total_{product_value.replace(" ", "_")}_weight_loss'
-            pct_change_col = f'{product_value.replace(" ", "_")}_weight_loss_pct_change'
+        for product_type in unique_product_types:
+            weight_loss_col = f'total_{product_type.replace(" ", "_").lower()}_weight_loss'
+            pct_change_col = f'{product_type.replace(" ", "_").lower()}_weight_loss_pct_change'
             
             if weight_loss_col in summary_df.columns:
                 # Calculate percentage change (current - previous) / previous * 100
@@ -357,11 +387,13 @@ def process_sheets_data(stock_inflow_df: pd.DataFrame,
         stock_inflow_df = standardize_dates(stock_inflow_df)
         release_df = standardize_dates(release_df)
         
-        release_df.loc[
-            release_df['product'].str.contains(PRODUCT_TYPES['GIZZARD'], 
-                                             case=False, na=False), 
-            'quantity'
-        ] = 0
+        # Set gizzard quantity to 0 in release data (gizzard is sold by weight, not quantity)
+        if 'product' in release_df.columns and 'quantity' in release_df.columns:
+            release_df.loc[
+                release_df['product'].str.contains('gizzard', 
+                                                 case=False, na=False), 
+                'quantity'
+            ] = 0
         
         summary_df = create_summary_df(stock_inflow_df, release_df)
         
