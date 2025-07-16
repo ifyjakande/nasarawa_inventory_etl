@@ -239,6 +239,11 @@ def create_summary_df(stock_inflow_df: pd.DataFrame, release_df: pd.DataFrame) -
         summary_df['year_month'] = summary_df['sort_date'].dt.strftime('%Y-%m')
         summary_df = summary_df.drop('sort_date', axis=1)
         
+        # Format all numeric columns to 3 decimal places
+        numeric_columns = summary_df.select_dtypes(include=['float64', 'int64']).columns
+        for col in numeric_columns:
+            summary_df[col] = summary_df[col].astype(float).round(3)
+        
         return summary_df
     except Exception as e:
         raise DataProcessingError(f"Failed to create summary: {str(e)}")
