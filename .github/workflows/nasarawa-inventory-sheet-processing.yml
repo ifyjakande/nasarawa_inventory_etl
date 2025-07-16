@@ -1,0 +1,39 @@
+name: Nasarawa Inventory Sheet Processing
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/30 * * * *'  
+
+jobs:
+  sheets-processing:
+    name: 📊 Process Google Sheets Data  
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+          cache: 'pip'
+          cache-dependency-path: '**/requirements.txt'
+          
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
+      - name: 🔑 Create service account key file
+        env:
+          CREDS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
+        run: |
+          echo "$CREDS" > credentials.json
+          
+      - name: 🔄 Run data processing script
+        env:
+          SOURCE_SPREADSHEET_ID: ${{ secrets.SOURCE_SPREADSHEET_ID }}
+          OUTPUT_SPREADSHEET_ID: ${{ secrets.OUTPUT_SPREADSHEET_ID }}
+        run: python transformation.py
