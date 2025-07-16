@@ -17,7 +17,12 @@ SHEET_NAMES = {
 
 PRODUCT_TYPES = {
     'WHOLE CHICKEN': 'whole chicken',
-    'GIZZARD': 'gizzard'
+    'GIZZARD': 'gizzard',
+    'WINGS': 'wings',
+    'LAPS': 'laps',
+    'BREAST': 'breast',
+    'BONE': 'bone',
+    'FILLET': 'fillet'
 }
 
 DATE_FORMATS = ['%d %b %Y', '%d/%m/%y', '%d-%b-%Y']
@@ -138,6 +143,17 @@ def create_summary_df(stock_inflow_df: pd.DataFrame, release_df: pd.DataFrame) -
         summary_df['month'] = summary_df['year_month'].str.split('-').str[1].str.lower()
         summary_df = summary_df[['month', 'year_month']]
         
+        # Calculate weight loss for each product
+        weight_loss_summaries = {}
+        for product_key, product_value in PRODUCT_TYPES.items():
+            product_data = stock_inflow_df[
+                stock_inflow_df['product_type'] == product_value
+            ].copy()
+            
+            if not product_data.empty and 'kaduna_coldroom_weight' in product_data.columns and 'weight' in product_data.columns:
+                product_data['weight_loss'] = product_data['kaduna_coldroom_weight'] - product_data['weight']
+                weight_loss_summaries[f'{product_value}_weight_loss'] = product_data.groupby('year_month')['weight_loss'].sum()
+        
         product_summaries = {
             'chicken_inflow': stock_inflow_df[
                 stock_inflow_df['product_type'] == PRODUCT_TYPES['WHOLE CHICKEN']
@@ -172,12 +188,28 @@ def create_summary_df(stock_inflow_df: pd.DataFrame, release_df: pd.DataFrame) -
             'total_gizzard_release_weight': ('gizzard_release', 'weight')
         }
         
-        for col_name, (summary_key, metric) in summary_columns.items():
-            if metric in product_summaries[summary_key].columns:
-                summary_df[col_name] = summary_df['year_month'].map(
-                    product_summaries[summary_key][metric]).fillna(0)
+        # Add weight loss columns
+        for product_key, product_value in PRODUCT_TYPES.items():
+            weight_loss_key = f'{product_value}_weight_loss'
+            if weight_loss_key in weight_loss_summaries:
+                summary_columns[f'total_{product_value.replace(" ", "_")}_weight_loss'] = weight_loss_key
+        
+        for col_name, summary_key in summary_columns.items():
+            if isinstance(summary_key, tuple):
+                # Handle existing product summaries
+                summary_dict, metric = summary_key
+                if metric in product_summaries[summary_dict].columns:
+                    summary_df[col_name] = summary_df['year_month'].map(
+                        product_summaries[summary_dict][metric]).fillna(0)
+                else:
+                    summary_df[col_name] = 0
             else:
-                summary_df[col_name] = 0
+                # Handle weight loss summaries
+                if summary_key in weight_loss_summaries:
+                    summary_df[col_name] = summary_df['year_month'].map(
+                        weight_loss_summaries[summary_key]).fillna(0)
+                else:
+                    summary_df[col_name] = 0
 
         # Sort by year_month in ascending order to process chronologically
         summary_df['sort_date'] = pd.to_datetime(summary_df['year_month'], format='%Y-%b')
