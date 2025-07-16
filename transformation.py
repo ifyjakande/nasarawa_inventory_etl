@@ -271,6 +271,17 @@ def create_summary_df(stock_inflow_df: pd.DataFrame, release_df: pd.DataFrame) -
         summary_df['year_month'] = summary_df['sort_date'].dt.strftime('%Y-%m')
         summary_df = summary_df.drop('sort_date', axis=1)
         
+        # Add percentage change columns for weight loss
+        for product_value in PRODUCT_TYPES.values():
+            weight_loss_col = f'total_{product_value.replace(" ", "_")}_weight_loss'
+            pct_change_col = f'{product_value.replace(" ", "_")}_weight_loss_pct_change'
+            
+            if weight_loss_col in summary_df.columns:
+                # Calculate percentage change (current - previous) / previous * 100
+                summary_df[pct_change_col] = summary_df[weight_loss_col].pct_change() * 100
+                # Replace inf and -inf with 0 (when previous month was 0)
+                summary_df[pct_change_col] = summary_df[pct_change_col].replace([float('inf'), float('-inf')], 0)
+        
         # Format all numeric columns to 3 decimal places
         numeric_columns = summary_df.select_dtypes(include=['float64', 'int64']).columns
         for col in numeric_columns:
