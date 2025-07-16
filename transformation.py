@@ -146,7 +146,7 @@ def create_summary_df(stock_inflow_df: pd.DataFrame, release_df: pd.DataFrame) -
             ].copy()
             
             if not product_data.empty and 'kaduna_coldroom_weight' in product_data.columns and 'weight' in product_data.columns:
-                product_data['weight_loss'] = product_data['kaduna_coldroom_weight'] - product_data['weight']
+                product_data['weight_loss'] = product_data['weight'] - product_data['kaduna_coldroom_weight']
                 weight_loss_summaries[f'{product_type}_weight_loss'] = product_data.groupby('year_month')['weight_loss'].sum()
         
         # Create dynamic product summaries for both inflow and release
