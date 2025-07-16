@@ -153,8 +153,15 @@ def create_summary_df(stock_inflow_df: pd.DataFrame, release_df: pd.DataFrame) -
         product_summaries = {}
         
         # Get unique product types from both inflow and release data
+        # Standardize casing to match inflow format (title case)
         inflow_products = stock_inflow_df['product_type'].dropna().unique()
-        release_products = release_df['product'].dropna().unique() if 'product' in release_df.columns else []
+        
+        if 'product' in release_df.columns:
+            # Convert release product names to match inflow format
+            release_df['product'] = release_df['product'].str.title()
+            release_products = release_df['product'].dropna().unique()
+        else:
+            release_products = []
         
         # Process inflow data for each product type
         for product_type in inflow_products:
