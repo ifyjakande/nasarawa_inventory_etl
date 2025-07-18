@@ -136,7 +136,6 @@ def create_summary_df(stock_inflow_df: pd.DataFrame, release_df: pd.DataFrame) -
         
         # Get unique product types dynamically from the data
         unique_product_types = stock_inflow_df['product_type'].dropna().unique()
-        print(f"\\nFound product types: {unique_product_types}")
         
         # Calculate weight loss for each product
         weight_loss_summaries = {}
