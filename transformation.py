@@ -386,12 +386,18 @@ def process_sheets_data(stock_inflow_df: pd.DataFrame,
         
         release_df = standardize_dataframe(release_df)
         
-        # Check for rows with empty dates and raise error if found
+        # Filter out rows where both date and product_type are empty for stock_inflow
+        stock_inflow_df = stock_inflow_df[
+            ~((stock_inflow_df['date'].isna() | (stock_inflow_df['date'] == '')) & 
+              (stock_inflow_df['product_type'].isna() | (stock_inflow_df['product_type'] == '')))
+        ]
+        
+        # Check for rows with missing dates in remaining data for stock_inflow
         missing_dates_inflow = stock_inflow_df[stock_inflow_df['date'].isna() | (stock_inflow_df['date'] == '')]
         missing_dates_release = release_df[release_df['date'].isna() | (release_df['date'] == '')]
         
         if not missing_dates_inflow.empty:
-            raise DataProcessingError(f"Stock inflow sheet contains {len(missing_dates_inflow)} rows with missing dates. All rows must have valid dates.")
+            raise DataProcessingError(f"Stock inflow sheet contains {len(missing_dates_inflow)} rows with missing dates but other data present. All rows with data must have valid dates.")
         
         if not missing_dates_release.empty:
             raise DataProcessingError(f"Release sheet contains {len(missing_dates_release)} rows with missing dates. All rows must have valid dates.")
