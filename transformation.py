@@ -301,12 +301,8 @@ def create_summary_df(stock_inflow_df: pd.DataFrame, release_df: pd.DataFrame) -
                     release = summary_df.iloc[i, summary_df.columns.get_loc(wt_release_col)] if wt_release_col in summary_df.columns else 0
                     summary_df.iloc[i, summary_df.columns.get_loc(wt_balance_col)] = opening_stock + inflow - release
 
-        # Sort in descending order (newest first) and clean up
-        summary_df = summary_df.sort_values('sort_date', ascending=False)
-        summary_df['year_month'] = summary_df['sort_date'].dt.strftime('%Y-%m')
-        summary_df = summary_df.drop('sort_date', axis=1)
-        
-        # Add percentage change columns for weight loss
+        # Add percentage change columns for weight loss BEFORE final sorting
+        # This ensures we calculate change in chronological order (oldest to newest)
         for product_type in unique_product_types:
             weight_loss_col = f'total_{product_type.replace(" ", "_").lower()}_weight_loss'
             pct_change_col = f'{product_type.replace(" ", "_").lower()}_weight_loss_pct_change'
@@ -316,6 +312,13 @@ def create_summary_df(stock_inflow_df: pd.DataFrame, release_df: pd.DataFrame) -
                 summary_df[pct_change_col] = summary_df[weight_loss_col].pct_change() * 100
                 # Replace inf and -inf with 0 (when previous month was 0)
                 summary_df[pct_change_col] = summary_df[pct_change_col].replace([float('inf'), float('-inf')], 0)
+                # Fill NaN values (first month) with 0
+                summary_df[pct_change_col] = summary_df[pct_change_col].fillna(0)
+        
+        # Sort in descending order (newest first) and clean up
+        summary_df = summary_df.sort_values('sort_date', ascending=False)
+        summary_df['year_month'] = summary_df['sort_date'].dt.strftime('%Y-%m')
+        summary_df = summary_df.drop('sort_date', axis=1)
         
         # Format all numeric columns to 3 decimal places
         numeric_columns = summary_df.select_dtypes(include=['float64', 'int64']).columns
